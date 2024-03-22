@@ -20,7 +20,7 @@ release_hdr := $(shell sh -c './mkreleasehdr.sh')
 uname_S := $(shell sh -c 'uname -s 2>/dev/null || echo not')
 uname_M := $(shell sh -c 'uname -m 2>/dev/null || echo not')
 OPTIMIZATION?=-O2 -flto
-DEPENDENCY_TARGETS=linenoise lua hdr_histogram
+DEPENDENCY_TARGETS=linenoise hdr_histogram
 NODEPS:=clean distclean
 
 # Default settings
@@ -274,8 +274,8 @@ ifdef OPENSSL_PREFIX
 endif
 
 # Include paths to dependencies
-FINAL_CFLAGS+= -I../deps/linenoise -I../deps/lua/src -I../deps/hdr_histogram
-FINAL_CXXFLAGS+= -I../deps/linenoise -I../deps/lua/src -I../deps/hdr_histogram
+FINAL_CFLAGS+= -I../deps/linenoise -I../deps/hdr_histogram
+FINAL_CXXFLAGS+= -I../deps/linenoise -I../deps/hdr_histogram
 
 ifeq ($(USE_SYSTEM_CONCURRENTQUEUE),yes)
 	FINAL_CXXFLAGS+= -I/usr/include/concurrentqueue/moodycamel
@@ -379,6 +379,19 @@ endif
 endif
 endif
 
+ifeq ($(USE_SYSTEM_LUA),yes)
+	LUA_PC = lua5.1 lua5.1-bitop lua5.1-cjson
+	LUA_CFLAGS := $(shell $(PKG_CONFIG) --cflags $(LUA_PC))
+	FINAL_CFLAGS+= $(LUA_CFLAGS)
+	FINAL_CXXFLAGS+= $(LUA_CFLAGS)
+	SERVER_LIBS+= $(shell $(PKG_CONFIG) --libs $(LUA_PC))
+else
+	DEPENDENCY_TARGETS+= lua
+	FINAL_CFLAGS+= -I../deps/lua/src
+	FINAL_CXXFLAGS+= -I../deps/lua/src
+	SERVER_LIBS+= ../deps/lua/src/liblua.a
+endif
+
 ifndef V
     define MAKE_INSTALL
         @printf '    %b %b\n' $(LINKCOLOR)INSTALL$(ENDCOLOR) $(BINCOLOR)$(1)$(ENDCOLOR) 1>&2
@@ -456,6 +469,7 @@ persist-settings: distclean
 	echo BUILD_TLS=$(BUILD_TLS) >> .make-settings
 	echo USE_SYSTEMD=$(USE_SYSTEMD) >> .make-settings
 	echo USE_SYSTEM_HIREDIS=$(USE_SYSTEM_HIREDIS) >> .make-settings
+	echo USE_SYSTEM_LUA=$(USE_SYSTEM_LUA) >> .make-settings
 	echo CFLAGS=$(CFLAGS) >> .make-settings
 	echo CXXFLAGS=$(CXXFLAGS) >> .make-settings
 	echo LDFLAGS=$(LDFLAGS) >> .make-settings
@@ -485,7 +499,7 @@ endif
 
 # keydb-server
 $(REDIS_SERVER_NAME): $(REDIS_SERVER_OBJ) $(KEYDB_SERVER_OBJ)
-	$(REDIS_LD) -o $@ $^ ../deps/lua/src/liblua.a $(FINAL_LIBS)
+	$(REDIS_LD) -o $@ $^ $(SERVER_LIBS) $(FINAL_LIBS)
 
 # keydb-sentinel
 $(REDIS_SENTINEL_NAME): $(REDIS_SERVER_NAME)
